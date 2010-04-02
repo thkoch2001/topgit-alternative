@@ -1,0 +1,132 @@
+Design document for a patch management system on a DVCS
+=======================================================
+
+.. This file is written in the ReST format:
+   http://docutils.sourceforge.net/rst.html
+
+:Author: Thomas Koch
+:Date: 2010-04-02
+
+Requirements
+------------
+
+The system to implement manages patchsets. A patchset is a set of patches with
+a tree-ish dependency graph between the patches. There's one distinct root of
+this dependency graph.
+
+Patches are managed as branches with each branch representing a patch.
+Modification of a patch is done by a commit to the respective branch. A branch
+representing a patch as part of a patchset is called patchbranch.
+
+The patch of a patchbranch is created as the diff between the root of the
+patchbranch and the head.
+
+The most important management methods are:
+
+* Export a patchset in different formats
+
+  * quilt
+
+  * a merged commit of all patches
+
+  * a line of commits with each commit representing one patch
+
+* Update a patchset against an updated root.
+
+* Copy a patchset
+
+* Delete a patchset from direct visibility while preserving all history about
+  it
+
+* Hide and unhide a patchset from direct visibility
+
+Additional requirements:
+
+* The system should be implementable on top of GIT, Mercurial and eventually
+  Bazaar. 
+
+* The system must easily cope with multiple different and independent patchsets.
+
+* All information about a patchset must be encoded in one distinct branch.
+  Publishing this one branch must be sufficient to allow somebody else to
+  recreate the patchset with all of its patchbranches.
+
+* The system should not rely on the presence of hooks.
+
+* The system should not require the addition of management files in patch
+  branches (like .topmsg and .topdeps in topgit)
+
+* The system must be easy to understand for a regular user of the underlying
+  DVCS.
+
+* The implementation may allow a patchset to depend on another patchset(s).
+
+implementation
+--------------
+
+patchset meta branch
+....................
+
+A patchset meta branch holds all informations about one patchset. First, it
+holds references to the top commits of all patch branches in the form of parent
+references of commits. Thus pushing the patchset meta branch automatically also
+pushes all commits of all patch branches.
+
+Secondly, the patchset meta branch contains meta informations about the
+patchset. These meta informations are:
+
+* The names of all patch branches together with the most recent commit
+  identifier of a particular patch branch. Let's save this information in a
+  file called branches.
+
+* A message for each patch branch that explains the patch. These messages can
+  be saved in the file tree as msg/${PATCH-BRANCH-NAME}
+
+* References to the dependencies of the patch (other patches of the same
+  patchset or the root of the patchset). This is also encoded in the file
+  branches.
+
+Since the patchset meta branch holds all this informations, it is possible, to
+delete all patch branches and recreate them from this informations.
+
+Although the commits of the patchset meta branches hold references to the patch
+branches, its file tree does not need to contain any files from the referenced
+patches. This may confuse the underlying DVCS, but the patch meta branch is not
+ment to be directly inspected.
+
+The branches file
+.................
+
+A branches file for a fictive patchset could look like::
+
+  # patch branches without an explicit dependency depend on the root of the
+  # patchset tree
+  # A Root can be given as either a fix commit (seen here), a branch or a tag.
+  # A fixed commit or tag is useful to maintain a patchset against an older
+  # upstream version
+  ROOT: 6a8589de32d490806ab86432a3181370e65953ca
+  # A tag as a dependency
+  #ROOT: upstream/0.1.2
+  # A branch as a dependency
+  #ROOT: upstream
+
+  # A regular patch with it's name and last commit
+  BRANCH: debian/use-debian-jars-in-build-xml 4bab542c261ff1a1ae87151c3536f19ef02d7937
+
+  # two other regular patches
+  BRANCH: upstream-jira/HDFS-1234 a8e4af13106582ca1bfbbcaeb0537f73faf46d87
+  BRANCH: upstream-jira/MAP-REDUCE-007 e3426bcbcb2537478f851edcf6eb04b34f6c7106
+
+  # This patch depends on the above two patches
+  # The sha1 below the dependency patches references a merge commit of the two
+  # dependencies
+  BRANCH: upstream-jira/HDFS-008 517851aa829d77e09bc5e59985fed1b0aa339cc6
+  DEPENDENCIES:
+    upstream-jira/HDFS-1234
+    upstream-jira/MAP-REDUCE-007
+      cc294f2e4773c4ff71efb83648a0e16835fca841
+
+  # A patch branch that belongs to the patch branch, but won't get exported (yet)
+  BRANCH: upstream-jira/HDFS-9999 74257905azgsa4689bc5e59985fed1b0aa339cc6
+  BRANCH-FLAGS: noexport
+
