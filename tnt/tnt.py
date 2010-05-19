@@ -18,6 +18,13 @@ def git_has_head( repo, searchedHead ):
             return True
     return False
 
+def git_heads_map(repo):
+    heads_list = repo.heads
+    heads_map = {}
+    for head in heads_list:
+        heads_map[head.name] = head
+    return heads_map
+
 def to_YAML( patchset ):
     return dump( patchset.serialize(), Dumper=Dumper )
 
