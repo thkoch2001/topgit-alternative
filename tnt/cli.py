@@ -186,6 +186,97 @@ class ExportCommand(object):
         f.write(content)
         f.close()
 
+class ImplodeCommand(object):
+    def main( self, argv ):
+        self.parse(argv)
+        self.run()
+
+    def getParser( self ):
+        parser = OptionParser()
+        return parser
+
+    def parse( self, argv ):
+        parser = self.getParser()
+        (options, args) = parser.parse_args(args = argv)
+        if len(args) != 1:
+            print "fail"
+            parser.error("")
+
+        self.patchset_name = args[0]
+
+    def run( self ):
+        repo = git.Repo(os.getcwd())
+        if not git_has_head(repo, self.patchset_name):
+            print "patchset does not exists: "+self.patchset_name
+            exit(1)
+
+        patchset_tree = repo.tree(self.patchset_name)
+        patchset = PatchSet.from_git_tree(patchset_tree)
+        branches_to_delete = []
+        heads = git_heads_map(repo)
+        for branch_name in patchset.branches:
+            branch = patchset.branches[branch_name]
+            # check whether existing branch has the same tip commit as recoreded one
+            if not branch_name in heads:
+                continue;
+            existing_branch = heads[branch_name]
+
+            if existing_branch.commit.id != branch.commit.id:
+                print "branch "+branch_name+" has commits not in the patchset"
+                print "."+existing_branch.commit.id+"."
+                print "."+branch.commit.id+"."
+                exit(1)
+
+            branches_to_delete.append(branch_name)
+            
+        if repo.active_branch in branches_to_delete:
+            print "can not delete checked out branch "+repo.active_branch
+            exit(1)
+
+        for branch_name in branches_to_delete:
+            repo.git.branch( "-D", branch_name )
+
+class ExplodeCommand(object):
+    def main( self, argv ):
+        self.parse(argv)
+        self.run()
+
+    def getParser( self ):
+        parser = OptionParser()
+        return parser
+
+    def parse( self, argv ):
+        parser = self.getParser()
+        (options, args) = parser.parse_args(args = argv)
+        if len(args) != 1:
+            print "fail"
+            parser.error("")
+
+        self.patchset_name = args[0]
+
+    def run( self ):
+        repo = git.Repo(os.getcwd())
+        if not git_has_head(repo, self.patchset_name):
+            print "patchset does not exists: "+self.patchset_name
+            exit(1)
+
+        patchset_tree = repo.tree(self.patchset_name)
+        patchset = PatchSet.from_git_tree(patchset_tree)
+        branches_to_create = []
+        heads = git_heads_map(repo)
+        for branch_name in patchset.branches:
+            branch = patchset.branches[branch_name]
+
+            if branch_name in heads:
+                print "branch "+branch_name+" already exists"
+                exit(1)
+
+            branches_to_create.append({"name":branch_name,"commit":branch.commit})
+
+        for branch in branches_to_create:
+            repo.git.branch( branch['name'], branch['commit'])
+
+
 def main( argv ):
     if len( argv ) < 2:
         print "no command"
